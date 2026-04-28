@@ -1,8 +1,8 @@
 
 ---
 
-# Development Plan: markdwonReaderPro Markdown Editor/Reader
-**Architecture:** Tauri (Rust) + Svelte (TS) + CodeMirror 6
+# Development Plan: markdownReaderPro Markdown Editor/Reader
+**Architecture:** Tauri 2.0 (Rust) + **Svelte 5** (TS) + CodeMirror 6
 
 code name kuro 
 
@@ -14,7 +14,7 @@ The goal is to build a cross-platform (macOS, Linux, Windows) Markdown applicati
 ## 2. Technical Specification
 ### Core Stack
 - **Backend (Kernel):** Rust 1.75+ (Tauri 2.0)
-- **Frontend (UI):** Svelte 4/5 (No Virtual DOM for maximum performance)
+- **Frontend (UI):** **Svelte 5** with Runes (`$state`, `$derived`, `$effect`) — No Virtual DOM, fine-grained reactivity without stores
 - **Editor Engine:** CodeMirror 6 (Modular architecture)
 - **Markdown Pipeline:** Unified.js (`remark` for AST parsing, `rehype` for HTML transformation)
 - **Styling:** TailwindCSS (utility-first, purged for minimal CSS bundle)
@@ -33,9 +33,14 @@ We will implement a **Unidirectional Data Flow** with a synchronized state betwe
 * **Commands:** Create the initial IPC bridge: `open_file`, `save_file`, `watch_file`.
 
 ### Phase 2: The "Brain" (Editor & IME)
-* **CM6 Integration:** Implement the `EditorView` as a Svelte component.
-* **Japanese IME Handling:** * Implement "Composition Gating" to prevent Svelte reactivity from interrupting the IME buffer.
-    * Configure `line-height` and `font-family` fallbacks specifically for Windows (Meiryo/Yu Gothic) and macOS (Hiragino).
+* **CM6 Integration:** Implement the `EditorView` as a Svelte 5 component using `$effect` to mount/destroy the CM6 instance on the DOM node.
+* **Svelte 5 Reactivity Model:**
+    * Use `$state` for `content`, `filePath`, `isDirty`, and `viewMode` — replaces Svelte 4 writable stores entirely.
+    * Use `$derived` for computed values (e.g., word count, sanitized HTML).
+    * Use `$effect` to fire Tauri IPC calls reactively when state changes.
+* **Japanese IME Handling:**
+    * Implement "Composition Gating" using `compositionstart` / `compositionend` events. In Svelte 5, gate the `$state` assignment inside the `compositionend` handler to prevent mid-composition re-renders from breaking the IME buffer.
+    * Configure `line-height` and `font-family` fallbacks for Windows (Meiryo/Yu Gothic) and macOS (Hiragino).
 * **Themed Syntax Highlighting:** Use `lezer-markdown` for the CM6 parser to ensure $O(n)$ highlighting performance.
 
 ### Phase 3: The Projection (Markdown Engine)
