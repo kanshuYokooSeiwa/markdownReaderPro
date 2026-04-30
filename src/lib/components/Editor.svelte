@@ -4,11 +4,15 @@
   import { markdown } from '@codemirror/lang-markdown';
   import { EditorState } from '@codemirror/state';
 
-  let { content = $bindable() } = $props();
+  let { content = $bindable(), onScroll } = $props<{
+    content: string,
+    onScroll?: (topLine: number) => void
+  }>();
 
   let editorContainer: HTMLDivElement;
   let view: EditorView;
   let isComposing = false;
+  let scrollHandler: () => void;
 
   onMount(() => {
     let state = EditorState.create({
@@ -37,10 +41,28 @@
       state,
       parent: editorContainer
     });
+
+    let scrollTicking = false;
+    scrollHandler = () => {
+      if (!scrollTicking && onScroll) {
+        window.requestAnimationFrame(() => {
+          const scrollTop = view.scrollDOM.scrollTop;
+          const blockInfo = view.lineBlockAtHeight(scrollTop);
+          const line = view.state.doc.lineAt(blockInfo.from);
+          onScroll(line.number);
+          scrollTicking = false;
+        });
+        scrollTicking = true;
+      }
+    };
+    view.scrollDOM.addEventListener('scroll', scrollHandler);
   });
 
   onDestroy(() => {
     if (view) {
+      if (scrollHandler) {
+        view.scrollDOM.removeEventListener('scroll', scrollHandler);
+      }
       view.destroy();
     }
   });

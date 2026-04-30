@@ -13,6 +13,11 @@
   let wordCount = $derived(content.trim().split(/\s+/).filter(w => w.length > 0).length);
 
   let initialContent = "";
+  
+  // Sync-Scroll State
+  let topVisibleLine = $state(1);
+  let previewPaneRef = $state<HTMLDivElement | null>(null);
+  let activeElement = $state<HTMLElement | null>(null);
 
   // Watch for changes in content to update isDirty and process markdown
   $effect(() => {
@@ -30,6 +35,67 @@
   // Sync state to Rust backend
   $effect(() => {
     invoke("sync_state", { isDirty, viewMode }).catch(console.error);
+  });
+
+  // Interpolation Engine for Sync Scroll
+  let lerpTicking = false;
+  let targetScroll = 0;
+  let currentScroll = 0;
+
+  function lerp(start: number, end: number, factor: number) {
+    return start + (end - start) * factor;
+  }
+
+  function animateScroll() {
+    if (!previewPaneRef) {
+      lerpTicking = false;
+      return;
+    }
+    
+    currentScroll = lerp(currentScroll, targetScroll, 0.1);
+    
+    if (Math.abs(targetScroll - currentScroll) < 1) {
+      previewPaneRef.scrollTop = targetScroll;
+      lerpTicking = false;
+    } else {
+      previewPaneRef.scrollTop = currentScroll;
+      window.requestAnimationFrame(animateScroll);
+    }
+  }
+
+  $effect(() => {
+    if ((viewMode === 'split' || viewMode === 'reader') && previewPaneRef) {
+      const elements = Array.from(previewPaneRef.querySelectorAll('[data-line]'));
+      let targetElement = elements[0] as HTMLElement | undefined;
+      
+      for (const el of elements) {
+        const line = parseInt(el.getAttribute('data-line') || '1', 10);
+        if (line <= topVisibleLine) {
+          targetElement = el as HTMLElement;
+        } else {
+          break;
+        }
+      }
+
+      if (targetElement) {
+        // Manage Focus Mode
+        if (activeElement) {
+          activeElement.classList.remove('active-paragraph');
+        }
+        targetElement.classList.add('active-paragraph');
+        activeElement = targetElement;
+
+        // Calculate Scroll
+        // Offset by a little bit so it's not flush at the top
+        targetScroll = Math.max(0, targetElement.offsetTop - previewPaneRef.offsetTop - 40); 
+        
+        if (!lerpTicking) {
+          currentScroll = previewPaneRef.scrollTop;
+          lerpTicking = true;
+          window.requestAnimationFrame(animateScroll);
+        }
+      }
+    }
   });
 
   async function handleOpen() {
@@ -55,9 +121,7 @@
   }
 
   async function handleSave() {
-    if (!filePath) {
-      return;
-    }
+    if (!filePath) return;
 
     try {
       await invoke("save_file", { path: filePath, content });
@@ -66,6 +130,10 @@
     } catch (err) {
       console.error("Failed to save file:", err);
     }
+  }
+
+  function handleEditorScroll(line: number) {
+    topVisibleLine = line;
   }
 </script>
 
@@ -78,7 +146,7 @@
       <select bind:value={viewMode} class="view-mode-select">
         <option value="editor">Editor Only</option>
         <option value="split">Split View</option>
-        <option value="reader">Reader Only</option>
+        <option value="reader">Reader Mode (Zen)</option>
       </select>
     </div>
     <div class="status">
@@ -90,12 +158,12 @@
   <div class="workspace {viewMode}">
     {#if viewMode === 'editor' || viewMode === 'split'}
       <div class="editor-pane">
-        <Editor bind:content />
+        <Editor bind:content onScroll={handleEditorScroll} />
       </div>
     {/if}
     
     {#if viewMode === 'reader' || viewMode === 'split'}
-      <div class="preview-pane markdown-body">
+      <div class="preview-pane markdown-body" class:focus-mode={viewMode === 'reader'} bind:this={previewPaneRef}>
         {@html htmlContent}
       </div>
     {/if}
@@ -127,6 +195,7 @@
     justify-content: space-between;
     padding: 0 16px;
     border-bottom: 1px solid #333;
+    z-index: 10;
   }
 
   .actions button, .view-mode-select {
@@ -176,17 +245,22 @@
     overflow: auto;
     background-color: #fafafa;
     color: #333;
-    padding: 24px 32px;
+    padding: 24px 48px;
+    position: relative;
+    scroll-behavior: auto; /* Handled by Lerp */
   }
 
   .workspace.reader .preview-pane {
-    max-width: 800px;
-    margin: 0 auto;
-    border-left: 1px solid #ddd;
-    border-right: 1px solid #ddd;
+    background-color: #f5f5f5;
   }
 
-  /* Make CM6 look decent in dark mode out of the box */
+  .workspace.reader :global(.markdown-body) {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 0;
+  }
+
+  /* Make CM6 look decent in dark mode */
   :global(.cm-editor) {
     color: #d4d4d4 !important;
   }
@@ -200,24 +274,41 @@
     background-color: rgba(255, 255, 255, 0.05) !important;
   }
 
-  /* Basic Markdown styling */
+  /* Basic Markdown typography */
   :global(.markdown-body) {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    line-height: 1.6;
+    font-family: "Hiragino Sans", "Meiryo", "Yu Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.8;
     word-wrap: break-word;
+    /* Phase 4: Typography Optimization */
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "palt";
   }
+  
   :global(.markdown-body h1, .markdown-body h2, .markdown-body h3) {
     margin-top: 24px;
     margin-bottom: 16px;
     font-weight: 600;
     line-height: 1.25;
+    color: #111;
   }
   :global(.markdown-body p) {
     margin-top: 0;
     margin-bottom: 16px;
+    font-size: 1.05rem;
+    color: #333;
   }
   :global(.markdown-body img) {
     max-width: 100%;
-    box-sizing: content-box;
+    border-radius: 4px;
+  }
+
+  /* Reader Mode (Focus Mode) Styles */
+  :global(.preview-pane.focus-mode .markdown-body > *) {
+    transition: opacity 0.5s ease;
+    opacity: 0.25;
+  }
+  
+  :global(.preview-pane.focus-mode .markdown-body > .active-paragraph) {
+    opacity: 1;
   }
 </style>
