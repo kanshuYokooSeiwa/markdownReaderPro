@@ -93,6 +93,13 @@ cargo fetch --manifest-path src-tauri/Cargo.toml
 
 ---
 
+## Import pnpm 
+
+```
+pnpm install
+```
+
+
 ## Running the App (Dev Mode)
 
 This starts both the Vite dev server (frontend) and the Tauri process with hot-reload:
