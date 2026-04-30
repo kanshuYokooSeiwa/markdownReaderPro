@@ -1,156 +1,223 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { open } from "@tauri-apps/plugin-dialog";
+  import Editor from "$lib/components/Editor.svelte";
+  import { processMarkdown } from "$lib/markdown";
 
-  let name = $state("");
-  let greetMsg = $state("");
+  let content = $state("");
+  let filePath = $state<string | null>(null);
+  let isDirty = $state(false);
+  let viewMode = $state<"editor" | "reader" | "split">("split");
+  let htmlContent = $state("");
 
-  async function greet(event: Event) {
-    event.preventDefault();
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsg = await invoke("greet", { name });
+  let wordCount = $derived(content.trim().split(/\s+/).filter(w => w.length > 0).length);
+
+  let initialContent = "";
+
+  // Watch for changes in content to update isDirty and process markdown
+  $effect(() => {
+    if (content !== initialContent) {
+      isDirty = true;
+    } else {
+      isDirty = false;
+    }
+    
+    processMarkdown(content, filePath).then(res => {
+      htmlContent = res;
+    }).catch(console.error);
+  });
+
+  // Sync state to Rust backend
+  $effect(() => {
+    invoke("sync_state", { isDirty, viewMode }).catch(console.error);
+  });
+
+  async function handleOpen() {
+    const selected = await open({
+      multiple: false,
+      filters: [{
+        name: 'Markdown',
+        extensions: ['md', 'markdown', 'txt']
+      }]
+    });
+
+    if (typeof selected === 'string') {
+      try {
+        const result = await invoke<string>("open_file", { path: selected });
+        content = result;
+        initialContent = result;
+        filePath = selected;
+        isDirty = false;
+      } catch (err) {
+        console.error("Failed to open file:", err);
+      }
+    }
+  }
+
+  async function handleSave() {
+    if (!filePath) {
+      return;
+    }
+
+    try {
+      await invoke("save_file", { path: filePath, content });
+      initialContent = content;
+      isDirty = false;
+    } catch (err) {
+      console.error("Failed to save file:", err);
+    }
   }
 </script>
 
-<main class="container">
-  <h1>Welcome to Tauri + Svelte</h1>
+<main class="app-container">
+  <header class="toolbar">
+    <div class="actions">
+      <button onclick={handleOpen}>Open</button>
+      <button onclick={handleSave} disabled={!isDirty || !filePath}>Save</button>
+      
+      <select bind:value={viewMode} class="view-mode-select">
+        <option value="editor">Editor Only</option>
+        <option value="split">Split View</option>
+        <option value="reader">Reader Only</option>
+      </select>
+    </div>
+    <div class="status">
+      <span>{filePath || "Untitled"} {isDirty ? "*" : ""}</span>
+      <span>| Words: {wordCount}</span>
+    </div>
+  </header>
 
-  <div class="row">
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo vite" alt="Vite Logo" />
-    </a>
-    <a href="https://tauri.app" target="_blank">
-      <img src="/tauri.svg" class="logo tauri" alt="Tauri Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank">
-      <img src="/svelte.svg" class="logo svelte-kit" alt="SvelteKit Logo" />
-    </a>
+  <div class="workspace {viewMode}">
+    {#if viewMode === 'editor' || viewMode === 'split'}
+      <div class="editor-pane">
+        <Editor bind:content />
+      </div>
+    {/if}
+    
+    {#if viewMode === 'reader' || viewMode === 'split'}
+      <div class="preview-pane markdown-body">
+        {@html htmlContent}
+      </div>
+    {/if}
   </div>
-  <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
-
-  <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
-  </form>
-  <p>{greetMsg}</p>
 </main>
 
 <style>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.svelte-kit:hover {
-  filter: drop-shadow(0 0 2em #ff3e00);
-}
-
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
 
-  a:hover {
-    color: #24c8db;
+  .app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
   }
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+  .toolbar {
+    height: 40px;
+    background-color: #252526;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid #333;
   }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
 
+  .actions button, .view-mode-select {
+    background-color: #333;
+    color: white;
+    border: none;
+    padding: 4px 12px;
+    margin-right: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .view-mode-select {
+    outline: none;
+  }
+
+  .actions button:hover {
+    background-color: #444;
+  }
+
+  .actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .status {
+    font-size: 0.85em;
+    color: #888;
+  }
+
+  .workspace {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .editor-pane {
+    flex: 1;
+    overflow: auto;
+    background-color: #1e1e1e;
+    border-right: 1px solid #333;
+  }
+
+  .preview-pane {
+    flex: 1;
+    overflow: auto;
+    background-color: #fafafa;
+    color: #333;
+    padding: 24px 32px;
+  }
+
+  .workspace.reader .preview-pane {
+    max-width: 800px;
+    margin: 0 auto;
+    border-left: 1px solid #ddd;
+    border-right: 1px solid #ddd;
+  }
+
+  /* Make CM6 look decent in dark mode out of the box */
+  :global(.cm-editor) {
+    color: #d4d4d4 !important;
+  }
+  :global(.cm-content) {
+    caret-color: #d4d4d4 !important;
+  }
+  :global(.cm-cursor, .cm-dropCursor) {
+    border-left-color: #d4d4d4 !important;
+  }
+  :global(.cm-activeLine) {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  /* Basic Markdown styling */
+  :global(.markdown-body) {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    word-wrap: break-word;
+  }
+  :global(.markdown-body h1, .markdown-body h2, .markdown-body h3) {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  :global(.markdown-body p) {
+    margin-top: 0;
+    margin-bottom: 16px;
+  }
+  :global(.markdown-body img) {
+    max-width: 100%;
+    box-sizing: content-box;
+  }
 </style>
