@@ -1,6 +1,9 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { open } from "@tauri-apps/plugin-dialog";
+  import { open, save } from "@tauri-apps/plugin-dialog";
+  import { listen } from "@tauri-apps/api/event";
+  import { WebviewWindow, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import { onMount } from "svelte";
   import Editor from "$lib/components/Editor.svelte";
   import { processMarkdown } from "$lib/markdown";
 
@@ -18,6 +21,36 @@
   let topVisibleLine = $state(1);
   let previewPaneRef = $state<HTMLDivElement | null>(null);
   let activeElement = $state<HTMLElement | null>(null);
+
+  onMount(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "editor") {
+      viewMode = "editor";
+    }
+
+    const unlisteners: (() => void)[] = [];
+
+    const ifFocused = (fn: () => void | Promise<void>) => async () => {
+      const win = getCurrentWebviewWindow();
+      if (await win.isFocused()) {
+        fn();
+      }
+    };
+
+    listen("menu-open-file", ifFocused(handleOpen)).then(unlisten => unlisteners.push(unlisten));
+    listen("menu-save-file", ifFocused(handleSave)).then(unlisten => unlisteners.push(unlisten));
+    
+    listen("menu-save-as", ifFocused(handleSaveAs)).then(unlisten => unlisteners.push(unlisten));
+
+    listen("menu-close", ifFocused(async () => {
+      const win = getCurrentWebviewWindow();
+      await win.close();
+    })).then(unlisten => unlisteners.push(unlisten));
+
+    return () => {
+      unlisteners.forEach(fn => fn());
+    };
+  });
 
   // Watch for changes in content to update isDirty and process markdown
   $effect(() => {
@@ -120,8 +153,26 @@
     }
   }
 
+  async function handleSaveAs() {
+    const selected = await save({
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]
+    });
+    if (typeof selected === 'string') {
+      try {
+        await invoke("save_file", { path: selected, content });
+        filePath = selected;
+        initialContent = content;
+        isDirty = false;
+      } catch (err) {
+        console.error("Failed to save as:", err);
+      }
+    }
+  }
+
   async function handleSave() {
-    if (!filePath) return;
+    if (!filePath) {
+      return handleSaveAs();
+    }
 
     try {
       await invoke("save_file", { path: filePath, content });
@@ -141,7 +192,7 @@
   <header class="toolbar">
     <div class="actions">
       <button onclick={handleOpen}>Open</button>
-      <button onclick={handleSave} disabled={!isDirty || !filePath}>Save</button>
+      <button onclick={handleSave} disabled={!isDirty}>Save</button>
       
       <div class="view-mode-buttons">
         <button 

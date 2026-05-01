@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use tauri::State;
 use tauri::http::Response;
+use tauri::menu::{Menu, MenuItem, Submenu, PredefinedMenuItem};
 
 #[derive(Default, serde::Serialize)]
 struct AppStateData {
@@ -49,6 +50,87 @@ fn sync_state(is_dirty: bool, view_mode: String, state: State<'_, AppState>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let open_i = MenuItem::with_id(app, "open", "Open file", true, None::<&str>)?;
+            let new_i = MenuItem::with_id(app, "new", "New file", true, None::<&str>)?;
+            let save_i = MenuItem::with_id(app, "save", "Save", true, None::<&str>)?;
+            let save_as_i = MenuItem::with_id(app, "save_as", "Save as", true, None::<&str>)?;
+            let new_window_i = MenuItem::with_id(app, "new_window", "New Window", true, None::<&str>)?;
+            let close_i = MenuItem::with_id(app, "close", "Close", true, None::<&str>)?;
+
+            let file_menu = Submenu::with_items(
+                app,
+                "File",
+                true,
+                &[&open_i, &new_i, &save_i, &save_as_i, &new_window_i, &close_i],
+            )?;
+
+            #[cfg(target_os = "macos")]
+            let menu = {
+                let app_menu = Submenu::with_items(app, "MarkdownReaderPro", true, &[
+                    &PredefinedMenuItem::about(app, None, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::services(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::hide(app, None)?,
+                    &PredefinedMenuItem::hide_others(app, None)?,
+                    &PredefinedMenuItem::show_all(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::quit(app, None)?,
+                ])?;
+                let edit_menu = Submenu::with_items(app, "Edit", true, &[
+                    &PredefinedMenuItem::undo(app, None)?,
+                    &PredefinedMenuItem::redo(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::cut(app, None)?,
+                    &PredefinedMenuItem::copy(app, None)?,
+                    &PredefinedMenuItem::paste(app, None)?,
+                    &PredefinedMenuItem::select_all(app, None)?,
+                ])?;
+                let window_menu = Submenu::with_items(app, "Window", true, &[
+                    &PredefinedMenuItem::minimize(app, None)?,
+                    &PredefinedMenuItem::maximize(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::close_window(app, None)?,
+                ])?;
+                Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &window_menu])?
+            };
+
+            #[cfg(not(target_os = "macos"))]
+            let menu = Menu::with_items(app, &[&file_menu])?;
+            app.set_menu(menu)?;
+
+            app.on_menu_event(move |app_handle, event| {
+                use tauri::Emitter;
+                match event.id.as_ref() {
+                    "open" => { let _ = app_handle.emit("menu-open-file", ()); }
+                    "new" => {
+                        let _ = tauri::WebviewWindowBuilder::new(
+                            app_handle,
+                            format!("window-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()),
+                            tauri::WebviewUrl::App("/?mode=editor".into())
+                        )
+                        .title("MarkdownReaderPro - New File")
+                        .build();
+                    }
+                    "save" => { let _ = app_handle.emit("menu-save-file", ()); }
+                    "save_as" => { let _ = app_handle.emit("menu-save-as", ()); }
+                    "new_window" => {
+                        let _ = tauri::WebviewWindowBuilder::new(
+                            app_handle,
+                            format!("window-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()),
+                            tauri::WebviewUrl::App("/".into())
+                        )
+                        .title("MarkdownReaderPro")
+                        .build();
+                    }
+                    "close" => { let _ = app_handle.emit("menu-close", ()); }
+                    _ => {}
+                }
+            });
+
+            Ok(())
+        })
         .manage(AppState(Mutex::new(AppStateData {
             file_path: None,
             is_dirty: false,
