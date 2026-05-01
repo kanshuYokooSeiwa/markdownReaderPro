@@ -301,6 +301,25 @@
     max-width: 100%;
     border-radius: 4px;
   }
+  
+  :global(.markdown-body table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 16px;
+  }
+  :global(.markdown-body th),
+  :global(.markdown-body td) {
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  :global(.markdown-body th) {
+    background-color: #f6f8fa;
+    font-weight: 600;
+  }
+  :global(.markdown-body tr:nth-child(even)) {
+    background-color: #f8f9fa;
+  }
 
   /* Reader Mode (Focus Mode) Styles */
   :global(.preview-pane.focus-mode .markdown-body > *) {
