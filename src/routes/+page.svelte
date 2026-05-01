@@ -7,7 +7,7 @@
   let content = $state("");
   let filePath = $state<string | null>(null);
   let isDirty = $state(false);
-  let viewMode = $state<"editor" | "reader" | "split">("split");
+  let viewMode = $state<"editor" | "reader" | "split">("reader");
   let htmlContent = $state("");
 
   let wordCount = $derived(content.trim().split(/\s+/).filter(w => w.length > 0).length);
@@ -143,11 +143,26 @@
       <button onclick={handleOpen}>Open</button>
       <button onclick={handleSave} disabled={!isDirty || !filePath}>Save</button>
       
-      <select bind:value={viewMode} class="view-mode-select">
-        <option value="editor">Editor Only</option>
-        <option value="split">Split View</option>
-        <option value="reader">Reader Mode (Zen)</option>
-      </select>
+      <div class="view-mode-buttons">
+        <button 
+          class="icon-btn" class:active={viewMode === 'reader'}
+          title="Reader" 
+          onclick={() => viewMode = 'reader'}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+        </button>
+        <button 
+          class="icon-btn" class:active={viewMode === 'split'}
+          title="Preview/Edit" 
+          onclick={() => viewMode = 'split'}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+        </button>
+        <button 
+          class="icon-btn" class:active={viewMode === 'editor'}
+          title="Edit Only" 
+          onclick={() => viewMode = 'editor'}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        </button>
+      </div>
     </div>
     <div class="status">
       <span>{filePath || "Untitled"} {isDirty ? "*" : ""}</span>
@@ -156,15 +171,17 @@
   </header>
 
   <div class="workspace {viewMode}">
+    {#if viewMode === 'reader' || viewMode === 'split'}
+      <div class="preview-pane" class:focus-mode={viewMode === 'reader'} bind:this={previewPaneRef}>
+        <div class="markdown-body">
+          {@html htmlContent}
+        </div>
+      </div>
+    {/if}
+
     {#if viewMode === 'editor' || viewMode === 'split'}
       <div class="editor-pane">
         <Editor bind:content onScroll={handleEditorScroll} />
-      </div>
-    {/if}
-    
-    {#if viewMode === 'reader' || viewMode === 'split'}
-      <div class="preview-pane markdown-body" class:focus-mode={viewMode === 'reader'} bind:this={previewPaneRef}>
-        {@html htmlContent}
       </div>
     {/if}
   </div>
@@ -198,7 +215,12 @@
     z-index: 10;
   }
 
-  .actions button, .view-mode-select {
+  .actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .actions button {
     background-color: #333;
     color: white;
     border: none;
@@ -209,8 +231,37 @@
     font-size: 14px;
   }
 
-  .view-mode-select {
-    outline: none;
+  .view-mode-buttons {
+    display: flex;
+    background-color: #333;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .actions .view-mode-buttons button.icon-btn {
+    background-color: transparent;
+    color: #aaa;
+    margin: 0;
+    border-radius: 0;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid #444;
+  }
+
+  .actions .view-mode-buttons button.icon-btn:last-child {
+    border-right: none;
+  }
+
+  .actions .view-mode-buttons button.icon-btn:hover {
+    background-color: #444;
+    color: #fff;
+  }
+
+  .actions .view-mode-buttons button.icon-btn.active {
+    background-color: #555;
+    color: #fff;
   }
 
   .actions button:hover {
@@ -237,7 +288,7 @@
     flex: 1;
     overflow: auto;
     background-color: #1e1e1e;
-    border-right: 1px solid #333;
+    border-left: 1px solid #333;
   }
 
   .preview-pane {
@@ -252,12 +303,13 @@
 
   .workspace.reader .preview-pane {
     background-color: #f5f5f5;
+    padding: 0;
   }
 
   .workspace.reader :global(.markdown-body) {
     max-width: 720px;
     margin: 0 auto;
-    padding: 40px 0;
+    padding: 64px 48px;
   }
 
   /* Make CM6 look decent in dark mode */
@@ -321,13 +373,8 @@
     background-color: #f8f9fa;
   }
 
-  /* Reader Mode (Focus Mode) Styles */
+  /* Reader Mode Styles */
   :global(.preview-pane.focus-mode .markdown-body > *) {
     transition: opacity 0.5s ease;
-    opacity: 0.25;
-  }
-  
-  :global(.preview-pane.focus-mode .markdown-body > .active-paragraph) {
-    opacity: 1;
   }
 </style>
