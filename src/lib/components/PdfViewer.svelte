@@ -99,10 +99,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    background-color: #525659;
+    background-color: transparent;
     padding: 20px;
-    overflow-y: auto;
-    height: 100%;
+    min-height: 100%;
     width: 100%;
     box-sizing: border-box;
   }

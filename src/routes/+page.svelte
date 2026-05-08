@@ -256,7 +256,7 @@
 
   <div class="workspace {viewMode}">
     {#if isPdf}
-      <div class="preview-pane" style="padding: 0;">
+      <div class="preview-pane" style="padding: 0; background-color: transparent;">
         <PdfViewer {pdfData} />
       </div>
     {:else}
