@@ -2,7 +2,10 @@
   import { invoke } from "@tauri-apps/api/core";
   import { open, save } from "@tauri-apps/plugin-dialog";
   import { listen } from "@tauri-apps/api/event";
-  import { WebviewWindow, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import {
+    WebviewWindow,
+    getCurrentWebviewWindow,
+  } from "@tauri-apps/api/webviewWindow";
   import { onMount } from "svelte";
   import Editor from "$lib/components/Editor.svelte";
   import PdfViewer from "$lib/components/PdfViewer.svelte";
@@ -17,10 +20,15 @@
   let viewMode = $state<"editor" | "reader" | "split">("reader");
   let htmlContent = $state("");
 
-  let wordCount = $derived(content.trim().split(/\s+/).filter(w => w.length > 0).length);
+  let wordCount = $derived(
+    content
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w.length > 0).length,
+  );
 
   let initialContent = "";
-  
+
   // Sync-Scroll State
   let topVisibleLine = $state(1);
   let previewPaneRef = $state<HTMLDivElement | null>(null);
@@ -41,18 +49,27 @@
       }
     };
 
-    listen("menu-open-file", ifFocused(handleOpen)).then(unlisten => unlisteners.push(unlisten));
-    listen("menu-save-file", ifFocused(handleSave)).then(unlisten => unlisteners.push(unlisten));
-    
-    listen("menu-save-as", ifFocused(handleSaveAs)).then(unlisten => unlisteners.push(unlisten));
+    listen("menu-open-file", ifFocused(handleOpen)).then((unlisten) =>
+      unlisteners.push(unlisten),
+    );
+    listen("menu-save-file", ifFocused(handleSave)).then((unlisten) =>
+      unlisteners.push(unlisten),
+    );
 
-    listen("menu-close", ifFocused(async () => {
-      const win = getCurrentWebviewWindow();
-      await win.close();
-    })).then(unlisten => unlisteners.push(unlisten));
+    listen("menu-save-as", ifFocused(handleSaveAs)).then((unlisten) =>
+      unlisteners.push(unlisten),
+    );
+
+    listen(
+      "menu-close",
+      ifFocused(async () => {
+        const win = getCurrentWebviewWindow();
+        await win.close();
+      }),
+    ).then((unlisten) => unlisteners.push(unlisten));
 
     return () => {
-      unlisteners.forEach(fn => fn());
+      unlisteners.forEach((fn) => fn());
     };
   });
 
@@ -63,10 +80,12 @@
     } else {
       isDirty = false;
     }
-    
-    processMarkdown(content, filePath).then(res => {
-      htmlContent = res;
-    }).catch(console.error);
+
+    processMarkdown(content, filePath)
+      .then((res) => {
+        htmlContent = res;
+      })
+      .catch(console.error);
   });
 
   // Sync state to Rust backend
@@ -88,9 +107,9 @@
       lerpTicking = false;
       return;
     }
-    
+
     currentScroll = lerp(currentScroll, targetScroll, 0.1);
-    
+
     if (Math.abs(targetScroll - currentScroll) < 1) {
       previewPaneRef.scrollTop = targetScroll;
       lerpTicking = false;
@@ -101,12 +120,14 @@
   }
 
   $effect(() => {
-    if ((viewMode === 'split' || viewMode === 'reader') && previewPaneRef) {
-      const elements = Array.from(previewPaneRef.querySelectorAll('[data-line]'));
+    if ((viewMode === "split" || viewMode === "reader") && previewPaneRef) {
+      const elements = Array.from(
+        previewPaneRef.querySelectorAll("[data-line]"),
+      );
       let targetElement = elements[0] as HTMLElement | undefined;
-      
+
       for (const el of elements) {
-        const line = parseInt(el.getAttribute('data-line') || '1', 10);
+        const line = parseInt(el.getAttribute("data-line") || "1", 10);
         if (line <= topVisibleLine) {
           targetElement = el as HTMLElement;
         } else {
@@ -117,15 +138,18 @@
       if (targetElement) {
         // Manage Focus Mode
         if (activeElement) {
-          activeElement.classList.remove('active-paragraph');
+          activeElement.classList.remove("active-paragraph");
         }
-        targetElement.classList.add('active-paragraph');
+        targetElement.classList.add("active-paragraph");
         activeElement = targetElement;
 
         // Calculate Scroll
         // Offset by a little bit so it's not flush at the top
-        targetScroll = Math.max(0, targetElement.offsetTop - previewPaneRef.offsetTop - 40); 
-        
+        targetScroll = Math.max(
+          0,
+          targetElement.offsetTop - previewPaneRef.offsetTop - 40,
+        );
+
         if (!lerpTicking) {
           currentScroll = previewPaneRef.scrollTop;
           lerpTicking = true;
@@ -138,21 +162,25 @@
   async function handleOpen() {
     const selected = await open({
       multiple: false,
-      filters: [{
-        name: 'Documents',
-        extensions: ['md', 'markdown', 'txt', 'pdf']
-      }]
+      filters: [
+        {
+          name: "Documents",
+          extensions: ["md", "markdown", "txt", "pdf"],
+        },
+      ],
     });
 
-    if (typeof selected === 'string') {
+    if (typeof selected === "string") {
       try {
-        if (selected.toLowerCase().endsWith('.pdf')) {
-          const result = await invoke<number[]>("read_pdf_file", { path: selected });
+        if (selected.toLowerCase().endsWith(".pdf")) {
+          const result = await invoke<number[]>("read_pdf_file", {
+            path: selected,
+          });
           pdfData = new Uint8Array(result);
           isPdf = true;
           filePath = selected;
           isDirty = false;
-          viewMode = 'reader';
+          viewMode = "reader";
         } else {
           const result = await invoke<string>("open_file", { path: selected });
           content = result;
@@ -170,9 +198,9 @@
 
   async function handleSaveAs() {
     const selected = await save({
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]
+      filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
     });
-    if (typeof selected === 'string') {
+    if (typeof selected === "string") {
       try {
         await invoke("save_file", { path: selected, content });
         filePath = selected;
@@ -192,8 +220,8 @@
       isPdf = false;
       pdfData = null;
       isDirty = true;
-      viewMode = 'split';
-      filePath = filePath ? filePath.replace(/\.pdf$/i, '.md') : null;
+      viewMode = "split";
+      filePath = filePath ? filePath.replace(/\.pdf$/i, ".md") : null;
     } catch (err) {
       console.error("Failed to extract text from PDF:", err);
     }
@@ -224,27 +252,81 @@
       <button onclick={handleOpen}>Open</button>
       <button onclick={handleSave} disabled={!isDirty || isPdf}>Save</button>
       {#if isPdf}
-        <button onclick={handleImportPdfText} style="background-color: #007acc; margin-left: 8px;">Import Text</button>
+        <button
+          onclick={handleImportPdfText}
+          style="background-color: #007acc; margin-left: 8px;"
+          >Import to Mardown</button
+        >
       {/if}
-      
-      <div class="view-mode-buttons" style={isPdf ? "display: none;" : "margin-left: 16px;"}>
-        <button 
-          class="icon-btn" class:active={viewMode === 'reader'}
-          title="Reader" 
-          onclick={() => viewMode = 'reader'}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+
+      <div
+        class="view-mode-buttons"
+        style={isPdf ? "display: none;" : "margin-left: 16px;"}
+      >
+        <button
+          class="icon-btn"
+          class:active={viewMode === "reader"}
+          title="Reader"
+          onclick={() => (viewMode = "reader")}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            ><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path
+              d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"
+            ></path></svg
+          >
         </button>
-        <button 
-          class="icon-btn" class:active={viewMode === 'split'}
-          title="Preview/Edit" 
-          onclick={() => viewMode = 'split'}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+        <button
+          class="icon-btn"
+          class:active={viewMode === "split"}
+          title="Preview/Edit"
+          onclick={() => (viewMode = "split")}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            ><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line
+              x1="12"
+              y1="3"
+              x2="12"
+              y2="21"
+            ></line></svg
+          >
         </button>
-        <button 
-          class="icon-btn" class:active={viewMode === 'editor'}
-          title="Edit Only" 
-          onclick={() => viewMode = 'editor'}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        <button
+          class="icon-btn"
+          class:active={viewMode === "editor"}
+          title="Edit Only"
+          onclick={() => (viewMode = "editor")}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            ><path
+              d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+            ></path><path
+              d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+            ></path></svg
+          >
         </button>
       </div>
     </div>
@@ -256,19 +338,26 @@
 
   <div class="workspace {viewMode}">
     {#if isPdf}
-      <div class="preview-pane" style="padding: 0; background-color: transparent;">
+      <div
+        class="preview-pane"
+        style="padding: 0; background-color: transparent;"
+      >
         <PdfViewer {pdfData} />
       </div>
     {:else}
-      {#if viewMode === 'reader' || viewMode === 'split'}
-        <div class="preview-pane" class:focus-mode={viewMode === 'reader'} bind:this={previewPaneRef}>
+      {#if viewMode === "reader" || viewMode === "split"}
+        <div
+          class="preview-pane"
+          class:focus-mode={viewMode === "reader"}
+          bind:this={previewPaneRef}
+        >
           <div class="markdown-body">
             {@html htmlContent}
           </div>
         </div>
       {/if}
 
-      {#if viewMode === 'editor' || viewMode === 'split'}
+      {#if viewMode === "editor" || viewMode === "split"}
         <div class="editor-pane">
           <Editor bind:content onScroll={handleEditorScroll} />
         </div>
@@ -284,7 +373,8 @@
     overflow: hidden;
     background-color: #1e1e1e;
     color: #d4d4d4;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
   }
 
   .app-container {
@@ -418,14 +508,23 @@
 
   /* Basic Markdown typography */
   :global(.markdown-body) {
-    font-family: "Hiragino Sans", "Meiryo", "Yu Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family:
+      "Hiragino Sans",
+      "Meiryo",
+      "Yu Gothic",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Helvetica,
+      Arial,
+      sans-serif;
     line-height: 1.8;
     word-wrap: break-word;
     /* Phase 4: Typography Optimization */
     text-rendering: optimizeLegibility;
     font-feature-settings: "palt";
   }
-  
+
   :global(.markdown-body h1, .markdown-body h2, .markdown-body h3) {
     margin-top: 24px;
     margin-bottom: 16px;
@@ -443,7 +542,7 @@
     max-width: 100%;
     border-radius: 4px;
   }
-  
+
   :global(.markdown-body table) {
     border-collapse: collapse;
     width: 100%;
