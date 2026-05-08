@@ -5,9 +5,13 @@
   import { WebviewWindow, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { onMount } from "svelte";
   import Editor from "$lib/components/Editor.svelte";
+  import PdfViewer from "$lib/components/PdfViewer.svelte";
   import { processMarkdown } from "$lib/markdown";
+  import { extractTextFromPdf } from "$lib/pdf";
 
   let content = $state("");
+  let isPdf = $state(false);
+  let pdfData = $state<Uint8Array | null>(null);
   let filePath = $state<string | null>(null);
   let isDirty = $state(false);
   let viewMode = $state<"editor" | "reader" | "split">("reader");
@@ -135,18 +139,29 @@
     const selected = await open({
       multiple: false,
       filters: [{
-        name: 'Markdown',
-        extensions: ['md', 'markdown', 'txt']
+        name: 'Documents',
+        extensions: ['md', 'markdown', 'txt', 'pdf']
       }]
     });
 
     if (typeof selected === 'string') {
       try {
-        const result = await invoke<string>("open_file", { path: selected });
-        content = result;
-        initialContent = result;
-        filePath = selected;
-        isDirty = false;
+        if (selected.toLowerCase().endsWith('.pdf')) {
+          const result = await invoke<number[]>("read_pdf_file", { path: selected });
+          pdfData = new Uint8Array(result);
+          isPdf = true;
+          filePath = selected;
+          isDirty = false;
+          viewMode = 'reader';
+        } else {
+          const result = await invoke<string>("open_file", { path: selected });
+          content = result;
+          initialContent = result;
+          filePath = selected;
+          isDirty = false;
+          isPdf = false;
+          pdfData = null;
+        }
       } catch (err) {
         console.error("Failed to open file:", err);
       }
@@ -166,6 +181,21 @@
       } catch (err) {
         console.error("Failed to save as:", err);
       }
+    }
+  }
+
+  async function handleImportPdfText() {
+    if (!pdfData) return;
+    try {
+      const extractedText = await extractTextFromPdf(pdfData);
+      content = extractedText;
+      isPdf = false;
+      pdfData = null;
+      isDirty = true;
+      viewMode = 'split';
+      filePath = filePath ? filePath.replace(/\.pdf$/i, '.md') : null;
+    } catch (err) {
+      console.error("Failed to extract text from PDF:", err);
     }
   }
 
@@ -192,9 +222,12 @@
   <header class="toolbar">
     <div class="actions">
       <button onclick={handleOpen}>Open</button>
-      <button onclick={handleSave} disabled={!isDirty}>Save</button>
+      <button onclick={handleSave} disabled={!isDirty || isPdf}>Save</button>
+      {#if isPdf}
+        <button onclick={handleImportPdfText} style="background-color: #007acc; margin-left: 8px;">Import Text</button>
+      {/if}
       
-      <div class="view-mode-buttons">
+      <div class="view-mode-buttons" style={isPdf ? "display: none;" : "margin-left: 16px;"}>
         <button 
           class="icon-btn" class:active={viewMode === 'reader'}
           title="Reader" 
@@ -222,18 +255,24 @@
   </header>
 
   <div class="workspace {viewMode}">
-    {#if viewMode === 'reader' || viewMode === 'split'}
-      <div class="preview-pane" class:focus-mode={viewMode === 'reader'} bind:this={previewPaneRef}>
-        <div class="markdown-body">
-          {@html htmlContent}
+    {#if isPdf}
+      <div class="preview-pane" style="padding: 0;">
+        <PdfViewer {pdfData} />
+      </div>
+    {:else}
+      {#if viewMode === 'reader' || viewMode === 'split'}
+        <div class="preview-pane" class:focus-mode={viewMode === 'reader'} bind:this={previewPaneRef}>
+          <div class="markdown-body">
+            {@html htmlContent}
+          </div>
         </div>
-      </div>
-    {/if}
+      {/if}
 
-    {#if viewMode === 'editor' || viewMode === 'split'}
-      <div class="editor-pane">
-        <Editor bind:content onScroll={handleEditorScroll} />
-      </div>
+      {#if viewMode === 'editor' || viewMode === 'split'}
+        <div class="editor-pane">
+          <Editor bind:content onScroll={handleEditorScroll} />
+        </div>
+      {/if}
     {/if}
   </div>
 </main>
