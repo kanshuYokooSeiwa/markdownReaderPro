@@ -99,6 +99,24 @@ cargo fetch --manifest-path src-tauri/Cargo.toml
 pnpm install
 ```
 
+## icon generate
+
+preoare one image of an icon
+This image can be a high-resolution image (ideally 1024x1024 px for the best quality). 
+
+### tauri command 
+
+```
+npm run tauri -- icon images/icon.png
+```
+
+This command will generate icons for all platforms.
+
+if the shape is not square, the below cammand will be cropped to a square.
+
+```
+sips --cropToHeightWidth 1336 1336 images/icon.png --out images/icon_square.png
+```
 
 ## Running the App (Dev Mode)
 

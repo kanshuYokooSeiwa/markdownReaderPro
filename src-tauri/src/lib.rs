@@ -47,6 +47,11 @@ fn sync_state(is_dirty: bool, view_mode: String, state: State<'_, AppState>) {
     st.view_mode = view_mode;
 }
 
+#[tauri::command]
+fn read_pdf_file(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -166,7 +171,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![open_file, save_file, watch_file, sync_state])
+        .invoke_handler(tauri::generate_handler![open_file, save_file, watch_file, sync_state, read_pdf_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
